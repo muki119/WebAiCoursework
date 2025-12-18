@@ -1,2 +1,2 @@
 # WebAiCoursework
-Implementing Machine Leaning on the wbe using Tensorflow.js
+Implementing Machine Learning on the web using Tensorflow.js

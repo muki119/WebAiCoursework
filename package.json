@@ -1,0 +1,27 @@
+{
+  "name": "webaicoursework",
+  "version": "1.0.0",
+  "description": "Implementing Machine Leaning on the wbe using Tensorflow.js",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muki119/WebAiCoursework.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/muki119/WebAiCoursework/issues"
+  },
+  "homepage": "https://github.com/muki119/WebAiCoursework#readme",
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5"
+  }
+}

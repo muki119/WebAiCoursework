@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "target": "ES2024",
+        "allowJs": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "skipLibCheck": false,
+        "strict": true,
+        "sourceMap": true,
+        "noEmit": true,
+        "outDir": " ./dist ",
+        "baseUrl": ".",
+    },
+    "include": [
+        "src"
+    ],
+    "exclude": [
+        "node_modules",
+        "**/node_modules/*"
+    ]
+}
