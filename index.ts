@@ -12,7 +12,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, "./src/views/index.html"));
 });
 
-var server = app.listen(port, function () {
+const server = app.listen(port, function () {
     console.log(`Server is running on port ${port}`);
 });
 
