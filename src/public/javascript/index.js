@@ -1,9 +1,7 @@
-
-
 console.log('TensorFlow.js version:', tf.version.tfjs);
 
 
-var confidenceThreshold = 0.5;
+
 
 var ApplicationState = {
     model: null,
@@ -13,10 +11,14 @@ var ApplicationState = {
     frameRate: 20,
     showVideo: false,
     selectedImageFile: null,
-    frameTimes: []
+    frameTimes: [],
+    confidenceThreshold: 0.5,
+    classesSet: new Set(),
+    prevClassesSet: new Set(),
+    noDisplaySet: new Set(),
 };
 
-function HandleModelChange(event) {
+function handleModelChange(event) {
     const selectedModel = event.target.value;
     console.log(`Loading model: ${selectedModel}`);
     cocoSsd.load({ base: selectedModel }).then(loadedModel => {
@@ -25,6 +27,7 @@ function HandleModelChange(event) {
         ApplicationState.model.detect(document.createElement('canvas')); // Warm up new model
         console.log(`Model ${selectedModel} loaded.`);
     });
+    resetClassesDetected();
 }
 async function handleImageUpload(event) {
     var imageVal;
@@ -32,6 +35,7 @@ async function handleImageUpload(event) {
         imageVal = event.target.files[0];
         await stopWebcam();
     }
+    resetClassesDetected();
     ApplicationState.selectedImageFile = event.target.files[0] || imageVal;
     document.getElementById('clearButton').disabled = false;
     processImage();
@@ -64,6 +68,8 @@ function resetCanvas() {
 }
 function handleWebcam() {
     resetCanvas();
+    resetClassesDetected();
+
     document.getElementById('stopWebcamButton').disabled = false;
     ApplicationState.showVideo = true;
     navigator.mediaDevices.getUserMedia({ video: true })
@@ -82,7 +88,6 @@ function handleWebcam() {
 
                     ApplicationState.canvasContext.drawImage(video, 0, 0, ApplicationState.canvasContext.canvas.width, ApplicationState.canvasContext.canvas.height);
                     ApplicationState.model.detect(video).then(prediction => {
-                        ;
                         displayBoundingBoxes(prediction, ApplicationState.canvasContext);
                     });
                     const endTime = performance.now();
@@ -117,10 +122,59 @@ async function stopWebcam() {
     ApplicationState.showVideo = false;
     document.getElementById('stopWebcamButton').disabled = true;
     resetCanvas();
+    resetClassesDetected();
 };
+
+async function displayClassesDetected() {
+    // display detected classes as buttons that when clicked filter the bounding boxes
+    if (ApplicationState.classesSet.size === ApplicationState.prevClassesSet.size && ApplicationState.classesSet.difference(ApplicationState.prevClassesSet).size === 0) return; // no change
+    ApplicationState.prevClassesSet = new Set(ApplicationState.classesSet);
+    var classesDiv = document.getElementById('classesDetected');
+    classesDiv.innerHTML = ''; // clear previous
+    ApplicationState.classesSet.forEach(className => {
+        if (ApplicationState.noDisplaySet.has(className)) return; // skip if in no display set
+        const button = document.createElement('button');
+        button.innerText = className;
+        button.onclick = () => {
+            ApplicationState.noDisplaySet.add(className);
+            ApplicationState.classesSet.delete(className);
+            console.log(`Filtering out class: ${className}`);
+            displayClassesDetected();
+            if (ApplicationState.selectedImageFile) processImage();
+        };
+        classesDiv.appendChild(button);
+    });
+    displayExcludedClasses();
+}
+
+function displayExcludedClasses() {
+    var excludedDiv = document.getElementById('excludedClasses');
+    excludedDiv.innerHTML = ''; // clear previous
+    ApplicationState.noDisplaySet.forEach(className => {
+        const button = document.createElement('button');
+        button.innerText = className;
+        button.onclick = () => {
+            ApplicationState.noDisplaySet.delete(className);
+            ApplicationState.classesSet.add(className);
+            console.log(`Including class: ${className}`);
+            displayExcludedClasses();
+            if (ApplicationState.selectedImageFile) processImage();
+        };
+        excludedDiv.appendChild(button);
+    });
+}
+
+function resetClassesDetected() {
+    ApplicationState.classesSet.clear();
+    ApplicationState.noDisplaySet.clear();
+    var classesDiv = document.getElementById('classesDetected');
+    classesDiv.innerHTML = ''; // clear display
+}
 function displayBoundingBoxes(predictions, ctx) {
-    predictions.forEach(prediction => {
-        if (prediction.score < confidenceThreshold) return; // skip low confidence
+    for (const prediction of predictions) {
+        if (ApplicationState.noDisplaySet.has(prediction.class)) continue; // skip filtered classes
+        ApplicationState.classesSet.add(prediction.class);
+        if (prediction.score < ApplicationState.confidenceThreshold) continue; // skip low confidence
         ctx.beginPath(); // begin drawing
         ctx.rect(...prediction.bbox); // draws rectangle of bounding box
         ctx.lineWidth = 2;
@@ -132,7 +186,8 @@ function displayBoundingBoxes(predictions, ctx) {
             prediction.bbox[0],
             prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10
         );
-    });
+    };
+    displayClassesDetected();
 }
 
 function saveCanvasImage() {
@@ -144,7 +199,37 @@ function saveCanvasImage() {
 }
 document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
 document.getElementById('webcamButton').addEventListener('click', handleWebcam);
+
+function displayBackendOptions() {
+    const backendSelect = document.getElementById('backendSelect');
+    const backends = tf.engine().backendNames();
+    backends.forEach(backend => {
+        const option = document.createElement('option');
+        option.value = backend;
+        option.text = backend.charAt(0).toUpperCase() + backend.slice(1);
+        if (backend === ApplicationState.backendType) {
+            option.selected = true;
+        }
+        tf.ready().then(() => { // waits for tf backend to be ready before checking
+            if (tf.getBackend() === backend) { // if whaat is auto selected by tf is this backend
+                option.selected = true;
+            }
+        });
+        console.log('Available backend:', backend);
+        console.log('Current backend:', tf.getBackend());
+        backendSelect.appendChild(option);
+    });
+}
+function HandleBackendChange(event) {
+    const selectedBackend = event.target.value;
+    console.log(`Switching to backend: ${selectedBackend}`);
+    tf.setBackend(selectedBackend).then(() => {
+        ApplicationState.backendType = selectedBackend;
+        console.log(`Backend switched to: ${selectedBackend}`);
+    });
+}
 var main = async () => {
+    displayBackendOptions();
     console.log('Loading COCO-SSD model...');
     ApplicationState.model = await cocoSsd.load();
     console.log('COCO-SSD model loaded. Warming up...');
@@ -152,6 +237,7 @@ var main = async () => {
     console.log('Model is ready.');
     ApplicationState.videoStream = document.createElement('video');
     console.log(ApplicationState.model)
+
 }
 
 document.getElementById('saveButton').addEventListener('click', saveCanvasImage);
@@ -159,8 +245,8 @@ document.getElementById('stopWebcamButton').addEventListener('click', () => {
     stopWebcam();
 });
 document.getElementById('confidenceThreshold').addEventListener('input', (event) => {
-    confidenceThreshold = event.target.value;
-    document.getElementById('confidenceValue').innerText = confidenceThreshold;
+    ApplicationState.confidenceThreshold = event.target.value;
+    document.getElementById('confidenceValue').innerText = ApplicationState.confidenceThreshold;
 });
 document.getElementById('clearButton').addEventListener('click', () => {
     resetCanvas();
@@ -174,8 +260,9 @@ document.getElementById('frameRateSlider').addEventListener('input', (event) => 
 document.getElementById('reprocessButton').addEventListener('click', () => {
     processImage();
 });
+document.getElementById('backendSelect').addEventListener('change', HandleBackendChange);
 
-document.getElementById('modelSelect').addEventListener('change', HandleModelChange);
+document.getElementById('modelSelect').addEventListener('change', handleModelChange);
 addEventListener('DOMContentLoaded', main);
 addEventListener('abort', () => {
     ApplicationState.model.dispose();

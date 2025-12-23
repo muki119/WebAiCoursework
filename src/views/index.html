@@ -24,6 +24,8 @@
             <option value="mobilenet_v1">MobileNet V1</option>
             <option value="mobilenet_v2">MobileNet V2 (Highest Accuracy)</option>
         </select>
+        <select id="backendSelect">
+        </select>
     </div>
     <div class = "inference-settings">
         <label for="confidenceThreshold">Confidence Threshold: <span id="confidenceValue">0.5</span></label>
@@ -36,6 +38,8 @@
             <span id="fpsDisplay"></span>
         </div>
         <canvas id="canvas"></canvas>
+        <div id="classesDetected"></div>
+        <div id="excludedClasses"></div>
     </div>
 </body>
 </html>
