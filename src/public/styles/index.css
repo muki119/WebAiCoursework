@@ -5,9 +5,75 @@ html,body {
     background-color: #f4f4f4;
 }
 
+.optionMenu {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-evenly;
+    padding: 10px;
+
+}
+.inference-settings {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    margin: 10px 0px 10px 0px;
+}
+
+#fpsDisplay {
+    font-weight: bold;
+    margin-left: 20px;
+    font-size: 1.75rem;
+}
+
+.mainContainer {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    flex-direction: column;
+    flex-wrap: wrap;
+}
+
 #canvas {
     height: 80vh;
+    max-width: 100vw;
     border: 2px solid #333;
     display: block;
     margin: 20px auto;
+}
+
+tr{
+    text-align: center;
+}
+
+.colorCell{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#dataDisplay {
+    width: 300px;
+    padding: 10px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+#classCounts table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+@media screen and (max-width: 600px) {
+    .optionMenu {
+        flex-direction: column;
+    }
+    #canvas {
+        max-width: 90vw;
+        height: auto;
+    }
 }

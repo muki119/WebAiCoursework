@@ -1,8 +1,5 @@
 console.log('TensorFlow.js version:', tf.version.tfjs);
 
-
-
-
 var ApplicationState = {
     model: null,
     canvasContext: document.getElementById('canvas').getContext('2d'),
@@ -16,7 +13,64 @@ var ApplicationState = {
     classesSet: new Set(),
     prevClassesSet: new Set(),
     noDisplaySet: new Set(),
+    classCounts: new Map(), // Map to hold counts of detected classes in a frame
+    classPredictions: new Map(), // Map to hold arrays of predictions per class
+    classColorsMap: new Map(), // Map to hold colors assigned to each class
+    topPredictionsHeap: null, // MaxHeap to hold top predictions based on confidence
 };
+
+const selectElements = {
+    backendSelect: document.getElementById('backendSelect'),
+    modelSelect: document.getElementById('modelSelect'),
+};
+const buttonElements = {
+    saveButton: document.getElementById('saveButton'),
+    clearButton: document.getElementById('clearButton'),
+    webcamButton: document.getElementById('webcamButton'),
+    stopWebcamButton: document.getElementById('stopWebcamButton'),
+    reprocessButton: document.getElementById('reprocessButton'),
+}
+const inputElements = {
+    imageUpload: document.getElementById('imageUpload'),
+    confidenceThreshold: document.getElementById('confidenceThreshold'),
+    frameRateSlider: document.getElementById('frameRateSlider'),
+};
+
+const displayElements = {
+    fpsDisplay: document.getElementById('fpsDisplay'),
+    confidenceValue: document.getElementById('confidenceValue'),
+    frameRateValue: document.getElementById('frameRateValue'),
+    classesDetected: document.getElementById('classesDetected'),
+    excludedClasses: document.getElementById('excludedClasses'),
+    classCountsTable: document.getElementById('classCountsTable'),
+    classCountsBody: document.getElementById('classCountsBody'),
+};
+
+
+
+function generateColorForClass(className) {
+    // from string name , generate a consistent color through hashing
+    //need to fit it into either rgb or hex format
+    let hash = 0;
+    for (let i = 0; i < className.length; i++) {
+        hash = className.charCodeAt(i) + ((hash << 5) - hash);
+        console.log('hash step', hash);
+    }
+    const hue = hash % 360; // hue between 0-359
+    return `hsl(${hue}, 70%, 50%)`;
+}
+
+
+function getColorForClass(className) {
+    if (ApplicationState.classColorsMap.has(className)) {
+        return ApplicationState.classColorsMap.get(className);
+    } else {
+        const color = generateColorForClass(className);
+        console.log('Generated color for', className, ':', color);
+        ApplicationState.classColorsMap.set(className, color);
+        return color;
+    }
+}
 
 function handleModelChange(event) {
     const selectedModel = event.target.value;
@@ -37,9 +91,9 @@ async function handleImageUpload(event) {
     }
     resetClassesDetected();
     ApplicationState.selectedImageFile = event.target.files[0] || imageVal;
-    document.getElementById('clearButton').disabled = false;
+    buttonElements.clearButton.disabled = false;
     processImage();
-    document.getElementById('reprocessButton').disabled = false;
+    buttonElements.reprocessButton.disabled = false;
 }
 function processImage() {
     if (!ApplicationState.selectedImageFile) return;
@@ -49,7 +103,6 @@ function processImage() {
         img.src = e.target.result; // sets image source to file data
         img.onload = async function () { // when image is loaded
             const prediction = await ApplicationState.model.detect(img); // make predictions
-            console.log('Predictions: ', prediction);
             ApplicationState.canvasContext.canvas.width = img.width;
             ApplicationState.canvasContext.canvas.height = img.height;
             ApplicationState.canvasContext.drawImage(img, 0, 0);
@@ -60,17 +113,19 @@ function processImage() {
 }
 
 function resetCanvas() {
+    clearClassDetections();
     ApplicationState.canvasContext.clearRect(0, 0, ApplicationState.canvasContext.canvas.width, ApplicationState.canvasContext.canvas.height);
-    document.getElementById("clearButton").disabled = true;
-    document.getElementById("reprocessButton").disabled = true;
+    buttonElements.clearButton.disabled = true;
+    buttonElements.reprocessButton.disabled = true;
     ApplicationState.selectedImageFile = null;
-    document.getElementById('imageUpload').value = null; // reset file input
+    inputElements.imageUpload.value = null; // reset file input
+    ApplicationState.topPredictionsHeap = null;
 }
 function handleWebcam() {
     resetCanvas();
     resetClassesDetected();
 
-    document.getElementById('stopWebcamButton').disabled = false;
+    buttonElements.stopWebcamButton.disabled = false;
     ApplicationState.showVideo = true;
     navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
@@ -85,6 +140,7 @@ function handleWebcam() {
                         stream.getTracks().forEach(track => track.stop());
                         return;
                     }
+                    ApplicationState.classCounts.clear();
 
                     ApplicationState.canvasContext.drawImage(video, 0, 0, ApplicationState.canvasContext.canvas.width, ApplicationState.canvasContext.canvas.height);
                     ApplicationState.model.detect(video).then(prediction => {
@@ -102,7 +158,7 @@ function handleWebcam() {
                     const currentFPS = (1000 / averageDelta).toFixed(1);
 
                     // UI Updates
-                    document.getElementById('fpsDisplay').innerText = `FPS: ${currentFPS}`;
+                    displayElements.fpsDisplay.innerText = `FPS: ${currentFPS}`;
                     if (ApplicationState.frameRate > 0) {
                         setTimeout(displayVideo, 1000 / ApplicationState.frameRate); // process based on frame rate
                     } else {
@@ -115,12 +171,12 @@ function handleWebcam() {
         })
         .catch(err => {
             console.error("Error accessing webcam: ", err);// display error 
-            document.getElementById('stopWebcamButton').disabled = true;
+            buttonElements.stopWebcamButton.disabled = true;
         });
 }
 async function stopWebcam() {
     ApplicationState.showVideo = false;
-    document.getElementById('stopWebcamButton').disabled = true;
+    buttonElements.stopWebcamButton.disabled = true;
     resetCanvas();
     resetClassesDetected();
 };
@@ -129,8 +185,7 @@ async function displayClassesDetected() {
     // display detected classes as buttons that when clicked filter the bounding boxes
     if (ApplicationState.classesSet.size === ApplicationState.prevClassesSet.size && ApplicationState.classesSet.difference(ApplicationState.prevClassesSet).size === 0) return; // no change
     ApplicationState.prevClassesSet = new Set(ApplicationState.classesSet);
-    var classesDiv = document.getElementById('classesDetected');
-    classesDiv.innerHTML = ''; // clear previous
+    displayElements.classesDetected.innerHTML = '';
     ApplicationState.classesSet.forEach(className => {
         if (ApplicationState.noDisplaySet.has(className)) return; // skip if in no display set
         const button = document.createElement('button');
@@ -138,18 +193,43 @@ async function displayClassesDetected() {
         button.onclick = () => {
             ApplicationState.noDisplaySet.add(className);
             ApplicationState.classesSet.delete(className);
+            ApplicationState.classCounts.clear();
+            ApplicationState.classPredictions.clear();
             console.log(`Filtering out class: ${className}`);
             displayClassesDetected();
             if (ApplicationState.selectedImageFile) processImage();
         };
-        classesDiv.appendChild(button);
+        displayElements.classesDetected.appendChild(button);
     });
     displayExcludedClasses();
 }
 
+function displayClassCounts() {
+    displayElements.classCountsBody.innerHTML = ''; // clear previous
+    ApplicationState.classCounts.forEach((count, className) => {
+        const row = document.createElement('tr');
+        const classCell = document.createElement('td');
+        classCell.innerText = className;
+        const colorCell = document.createElement('td');
+        colorCell.classList.add('colorCell');
+        const colorBox = document.createElement('div');
+        colorBox.style.width = '20px';
+        colorBox.style.height = '20px';
+        colorBox.style.backgroundColor = getColorForClass(className);
+        colorCell.appendChild(colorBox);
+        row.appendChild(colorCell);
+        row.appendChild(classCell);
+        const countCell = document.createElement('td');
+        countCell.innerText = count;
+        row.appendChild(classCell);
+        row.appendChild(countCell);
+        displayElements.classCountsBody.appendChild(row);
+    });
+}
+
 function displayExcludedClasses() {
-    var excludedDiv = document.getElementById('excludedClasses');
-    excludedDiv.innerHTML = ''; // clear previous
+    displayElements.excludedClasses.innerHTML = ''; // clear previous
+    displayElements.excludedClasses.innerHTML = ''; // clear previous
     ApplicationState.noDisplaySet.forEach(className => {
         const button = document.createElement('button');
         button.innerText = className;
@@ -158,28 +238,60 @@ function displayExcludedClasses() {
             ApplicationState.classesSet.add(className);
             console.log(`Including class: ${className}`);
             displayExcludedClasses();
+            resetClassesDetected();
+            ApplicationState.classCounts.clear();
+            ApplicationState.classPredictions.clear();
             if (ApplicationState.selectedImageFile) processImage();
         };
-        excludedDiv.appendChild(button);
+        displayElements.excludedClasses.appendChild(button);
     });
 }
 
 function resetClassesDetected() {
     ApplicationState.classesSet.clear();
     ApplicationState.noDisplaySet.clear();
-    var classesDiv = document.getElementById('classesDetected');
-    classesDiv.innerHTML = ''; // clear display
+    displayElements.classesDetected.innerHTML = ''; // clear display
 }
+
+function addClassDetection(prediction) {
+    const className = prediction.class;
+    //update max heap
+    const strippedPrediction = {
+        class: prediction.class,
+        score: prediction.score,
+    };
+    if (!ApplicationState.topPredictionsHeap) {
+        ApplicationState.topPredictionsHeap = new MaxHeap([strippedPrediction], (a, b) => a.score > b.score);
+    } else {
+        ApplicationState.topPredictionsHeap.insert(strippedPrediction);
+    }
+    // Update count
+    const currentCount = ApplicationState.classCounts.get(className) || 0;
+    ApplicationState.classCounts.set(className, currentCount + 1);
+    // Update predictions array
+    if (!ApplicationState.classPredictions.has(className)) {
+        ApplicationState.classPredictions.set(className, []);
+    }
+    ApplicationState.classPredictions.get(className).push(prediction);
+}
+
+function clearClassDetections() {
+    ApplicationState.classCounts.clear();
+    ApplicationState.classPredictions.clear();
+}
+
 function displayBoundingBoxes(predictions, ctx) {
+    ApplicationState.topPredictionsHeap = null;
     for (const prediction of predictions) {
+        addClassDetection(prediction);
         if (ApplicationState.noDisplaySet.has(prediction.class)) continue; // skip filtered classes
         ApplicationState.classesSet.add(prediction.class);
         if (prediction.score < ApplicationState.confidenceThreshold) continue; // skip low confidence
         ctx.beginPath(); // begin drawing
         ctx.rect(...prediction.bbox); // draws rectangle of bounding box
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = 'red';
-        ctx.fillStyle = 'red';
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = getColorForClass(prediction.class);
+        ctx.fillStyle = getColorForClass(prediction.class);
         ctx.stroke();
         ctx.fillText(
             `${prediction.class} (${(prediction.score * 100).toFixed(1)}%)`,
@@ -187,7 +299,9 @@ function displayBoundingBoxes(predictions, ctx) {
             prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10
         );
     };
+    console.log("predictions ranked by confidence:", ApplicationState.topPredictionsHeap ? ApplicationState.topPredictionsHeap.sort() : []);
     displayClassesDetected();
+    displayClassCounts();
 }
 
 function saveCanvasImage() {
@@ -197,11 +311,11 @@ function saveCanvasImage() {
     link.href = ApplicationState.canvasContext.canvas.toDataURL();
     link.click();
 }
+
 document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
 document.getElementById('webcamButton').addEventListener('click', handleWebcam);
 
 function displayBackendOptions() {
-    const backendSelect = document.getElementById('backendSelect');
     const backends = tf.engine().backendNames();
     backends.forEach(backend => {
         const option = document.createElement('option');
@@ -217,7 +331,7 @@ function displayBackendOptions() {
         });
         console.log('Available backend:', backend);
         console.log('Current backend:', tf.getBackend());
-        backendSelect.appendChild(option);
+        selectElements.backendSelect.appendChild(option);
     });
 }
 function HandleBackendChange(event) {
@@ -240,30 +354,21 @@ var main = async () => {
 
 }
 
-document.getElementById('saveButton').addEventListener('click', saveCanvasImage);
-document.getElementById('stopWebcamButton').addEventListener('click', () => {
-    stopWebcam();
-});
-document.getElementById('confidenceThreshold').addEventListener('input', (event) => {
+buttonElements.saveButton.addEventListener('click', saveCanvasImage);
+buttonElements.stopWebcamButton.addEventListener('click', stopWebcam);
+inputElements.confidenceThreshold.addEventListener('input', (event) => {
     ApplicationState.confidenceThreshold = event.target.value;
-    document.getElementById('confidenceValue').innerText = ApplicationState.confidenceThreshold;
+    displayElements.confidenceValue.innerText = ApplicationState.confidenceThreshold;
 });
-document.getElementById('clearButton').addEventListener('click', () => {
-    resetCanvas();
-});
-
-document.getElementById('frameRateSlider').addEventListener('input', (event) => {
+buttonElements.clearButton.addEventListener('click', resetCanvas);
+inputElements.frameRateSlider.addEventListener('input', (event) => {
     ApplicationState.frameRate = event.target.value;
-    document.getElementById('frameRateValue').innerText = ApplicationState.frameRate > 0 ? ApplicationState.frameRate : 'MAX';
+    displayElements.frameRateValue.innerText = ApplicationState.frameRate > 0 ? ApplicationState.frameRate : 'MAX';
 });
-
-document.getElementById('reprocessButton').addEventListener('click', () => {
-    processImage();
-});
-document.getElementById('backendSelect').addEventListener('change', HandleBackendChange);
-
-document.getElementById('modelSelect').addEventListener('change', handleModelChange);
+buttonElements.reprocessButton.addEventListener('click', processImage);
+selectElements.backendSelect.addEventListener('change', HandleBackendChange);
+selectElements.modelSelect.addEventListener('change', handleModelChange);
 addEventListener('DOMContentLoaded', main);
-addEventListener('abort', () => {
+addEventListener('abort', () => { // cleanup on page unload
     ApplicationState.model.dispose();
 });
