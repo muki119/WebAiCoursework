@@ -1,70 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web AI Coursework</title>
-    <script src="/javascript/index.js" type="module"></script>
-    <script src = "javascript/maxHeap.js"></script>
-    <link rel="stylesheet" href="/styles/index.css">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Web AI Coursework</title>
+		<script src="/javascript/index.js" type="module"></script>
+		<script src="javascript/maxHeap.js" type="module"></script>
+		<link rel="stylesheet" href="/styles/index.css" />
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"> </script>
-</head>
-<body>
-    <h1>Welcome to Web AI Coursework</h1>
-    <div class="optionMenu">
-        <input type="file" id="imageUpload" accept="image/*" />
-        <button id="clearButton" disabled>Clear Image</button>
-        <button id="reprocessButton" disabled>Re-Process Image</button>
-        or
-        <button id="webcamButton">Use Webcam</button>
-        <button id="stopWebcamButton" disabled>Stop Webcam</button>
-        <button id="saveButton">Save Image</button>
-        <select id="modelSelect">
-            <option selected value="lite_mobilenet_v2">Lite MobileNet V2 (Fastest Inference)</option>
-            <option value="mobilenet_v1">MobileNet V1</option>
-            <option value="mobilenet_v2">MobileNet V2 (Highest Accuracy)</option>
-        </select>
-        <select id="backendSelect">
-        </select>
-    </div>
-    <div class = "inference-settings">
-        <label for="confidenceThreshold">Confidence Threshold: <span id="confidenceValue">0.5</span></label>
-        <input type="range" id="confidenceThreshold" name="confidenceThreshold" min="0" max="1" step="0.01" value="0.5">
-        <label for="frameRateSlider">Frame Rate: <span id="frameRateValue">20</span> FPS</label>
-        <input type="range" id="frameRateSlider" name="frameRateSlider" min="0" max="60" step="5" value="20">
-    </div>
-    <div class="mainContainer">
-        <div>
-            <span id="fpsDisplay"></span>
-        </div>
-        <canvas id="canvas"></canvas>
-        <div id="dataDisplay">
-            <div id="classCounts">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Color</th>
-                            <th>Class</th>
-                            <th>Count</th>
-                        </tr>
-                    </thead>
-                    <tbody id="classCountsBody">
-
-                    </tbody>
-                </table>
-            </div>
-            <hr>
-            <div id="classesDetected">
-                <p>Classes Detected:</p>
-            </div>
-            <hr>
-            <div id="excludedClasses">
-                <p>Excluded Classes:</p>
-            </div>
-        </div>
-    </div>
-</body>
+		<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+	</head>
+	<body>
+		<div class="optionMenu">
+			<input type="file" id="imageUpload" accept="image/*" />
+			<button id="clearButton" disabled>Clear Image</button>
+			<button id="reprocessButton" disabled>Re-Process Image</button>
+			or
+			<button id="webcamButton">Use Webcam</button>
+			<button id="stopWebcamButton" disabled>Stop Webcam</button>
+			<button id="saveButton">Save Image</button>
+			<select id="modelSelect">
+				<option selected value="lite_mobilenet_v2">
+					Lite MobileNet V2 (Fastest Inference)
+				</option>
+				<option value="mobilenet_v1">MobileNet V1</option>
+				<option value="mobilenet_v2">MobileNet V2 (Highest Accuracy)</option>
+			</select>
+			<select id="backendSelect"></select>
+		</div>
+		<div class="inference-settings">
+			<label for="confidenceThreshold"
+				>Confidence Threshold: <span id="confidenceValue">0.5</span></label
+			>
+			<input
+				type="range"
+				id="confidenceThreshold"
+				name="confidenceThreshold"
+				min="0"
+				max="1"
+				step="0.01"
+				value="0.5"
+			/>
+			<label for="frameRateSlider"
+				>Frame Rate: <span id="frameRateValue">20</span> FPS</label
+			>
+			<input
+				type="range"
+				id="frameRateSlider"
+				name="frameRateSlider"
+				min="0"
+				max="60"
+				step="5"
+				value="20"
+			/>
+		</div>
+		<div class="mainContainer">
+			<div>
+				<span id="fpsDisplay"></span>
+				<!-- For displaying messages to the user -->
+				<p id="infoDisplay"></p>
+			</div>
+			<canvas id="canvas"></canvas>
+			<div class="dataDisplayContainer">
+				<div id="dataDisplay">
+					<div id="classCounts">
+						<table>
+							<thead>
+								<tr>
+									<th>Color</th>
+									<th>Class</th>
+									<th>Count</th>
+								</tr>
+							</thead>
+							<tbody id="classCountsBody"></tbody>
+						</table>
+					</div>
+					<hr />
+					<div class="includedClasses">
+						<label>Included Classes</label>
+						<div id="classesDetected"></div>
+					</div>
+					<hr />
+					<div class="excludedClassesContainer">
+						<label>Excluded Classes</label>
+						<div id="excludedClasses"></div>
+					</div>
+				</div>
+				<div class="detectionRanks">
+					<h3>Detection Ranks</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Rank</th>
+								<th>Class</th>
+								<th>Confidence</th>
+							</tr>
+						</thead>
+						<tbody id="detectionRanksBody"></tbody>
+					</table>
+				</div>
+                <div class = "modelMetadata">
+                    <h3>Model Metadata</h3>
+                    <label>Model Name</label>
+                    <p id="modelName"></p>
+                    <hr>
+                    <label>Version</label>
+                    <p id="modelVersion"></p>
+                    <hr>
+                    <label>Size</label>
+                    <p id="modelSize"></p>
+			</div>
+		</div>
+	</body>
 </html>

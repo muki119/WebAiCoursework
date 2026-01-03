@@ -55,7 +55,21 @@ tr{
     justify-content: center;
 }
 
-#dataDisplay {
+.dataDisplayContainer {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+}
+.modelMetadata {
+    display: flex;
+    flex-direction: column;
+    align-content: center;
+}
+.modelMetadata>h3 , .modelMetadata>p , .detectionRanks>h3 {
+    text-align: center;
+}
+#dataDisplay,.modelMetadata,.detectionRanks{
     width: 300px;
     padding: 10px;
     background-color: #fff;
@@ -63,11 +77,23 @@ tr{
     border-radius: 5px;
 }
 
-#classCounts table {
+#classCounts table , .detectionRanks table {
     width: 100%;
     border-collapse: collapse;
 }
-
+.classButton {
+    margin: 5px;
+    padding: 5px 10px;
+    border: none;
+    background-color: #007BFF;
+    font-size: large;
+    color: white;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.classButton:hover {
+    background-color: #0056b3;
+}
 @media screen and (max-width: 600px) {
     .optionMenu {
         flex-direction: column;

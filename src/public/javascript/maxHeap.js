@@ -1,4 +1,4 @@
-class MaxHeap {
+export default class MaxHeap {
 
     constructor(...elements) {
         if (elements.length > 0 && Array.isArray(elements[0])) {

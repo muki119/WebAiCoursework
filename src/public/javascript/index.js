@@ -1,5 +1,5 @@
 console.log('TensorFlow.js version:', tf.version.tfjs);
-
+import MaxHeap from "./maxHeap.js";
 var ApplicationState = {
     model: null,
     canvasContext: document.getElementById('canvas').getContext('2d'),
@@ -18,6 +18,24 @@ var ApplicationState = {
     classColorsMap: new Map(), // Map to hold colors assigned to each class
     topPredictionsHeap: null, // MaxHeap to hold top predictions based on confidence
 };
+
+const modelMetadata = {
+    'lite_mobilenet_v2': {
+        name: 'Lite MobileNet V2',
+        version: '1.0',
+        sizeMB: 18.0,
+    },
+    'mobilenet_v2': {
+        name: 'MobileNet V2',
+        version: '1.0.0',
+        sizeMB: 67.3,
+    },
+    'mobilenet_v1': {
+        name: 'SSD MobileNet V1',
+        version: '1.0.0',
+        sizeMB: 26.5,
+    },
+}
 
 const selectElements = {
     backendSelect: document.getElementById('backendSelect'),
@@ -38,12 +56,17 @@ const inputElements = {
 
 const displayElements = {
     fpsDisplay: document.getElementById('fpsDisplay'),
+    infoDisplay: document.getElementById('infoDisplay'),
     confidenceValue: document.getElementById('confidenceValue'),
     frameRateValue: document.getElementById('frameRateValue'),
     classesDetected: document.getElementById('classesDetected'),
     excludedClasses: document.getElementById('excludedClasses'),
     classCountsTable: document.getElementById('classCountsTable'),
     classCountsBody: document.getElementById('classCountsBody'),
+    modelName: document.getElementById('modelName'),
+    modelVersion: document.getElementById('modelVersion'),
+    modelSize: document.getElementById('modelSize'),
+    detectionRanksBody: document.getElementById('detectionRanksBody'), // tbody for detection ranks
 };
 
 
@@ -72,17 +95,63 @@ function getColorForClass(className) {
     }
 }
 
+
+function disableAllInteractiveElements() {
+    var interactiveElements = document.querySelectorAll('button, input, select');
+    interactiveElements.forEach(element => {
+        if (element.id === 'stopWebcamButton' && ApplicationState.showVideo) return; // keep stop button enabled if webcam is active
+        if (element.id === 'clearButton' && !ApplicationState.selectedImageFile) return; // keep clear button disabled if no image
+        if (element.id === 'reprocessButton' && !ApplicationState.selectedImageFile) return; // keep reprocess button disabled if no image
+        element.disabled = true;
+    });
+}
+function enableAllInteractiveElements() {
+    var interactiveElements = document.querySelectorAll('button, input, select');
+    interactiveElements.forEach(element => {
+        if (element.id === 'stopWebcamButton' && !ApplicationState.showVideo) return; // keep stop button disabled if webcam is not active
+        if (element.id === 'clearButton' && !ApplicationState.selectedImageFile) return; // keep clear button disabled if no image
+        if (element.id === 'reprocessButton' && !ApplicationState.selectedImageFile) return; // keep reprocess button disabled if no image
+        element.disabled = false;
+    });
+}
+
+
 function handleModelChange(event) {
     const selectedModel = event.target.value;
-    console.log(`Loading model: ${selectedModel}`);
+    changeModel(selectedModel);
+}
+function changeModel(selectedModel) {
+    displayInfoMessage(`Loading model: ${selectedModel}...`);
     cocoSsd.load({ base: selectedModel }).then(loadedModel => {
-        ApplicationState.model.dispose(); // Dispose of the old model
+        disableAllInteractiveElements();
+        ApplicationState.model?.dispose(); // Dispose of the old model
         ApplicationState.model = loadedModel;
         ApplicationState.model.detect(document.createElement('canvas')); // Warm up new model
-        console.log(`Model ${selectedModel} loaded.`);
+        displayModelInfo(selectedModel);
+    }).catch(err => {
+        displayInfoMessage(`Error loading model: ${err}`);
+        console.error("Error loading model: ", err);
+    }).finally(() => {
+        enableAllInteractiveElements();
+        resetClassesDetected();
+        hideInfoMessage();
+        console.log(ApplicationState.model);
     });
-    resetClassesDetected();
+
 }
+
+function displayInfoMessage(message) {
+    if (displayElements.infoDisplay.style.display === 'none') {
+        displayElements.infoDisplay.style.display = 'block';
+    }
+    displayElements.infoDisplay.innerText = message;
+}
+function hideInfoMessage() {
+    displayElements.infoDisplay.style.display = 'none';
+    displayElements.infoDisplay.innerText = '';
+}
+
+
 async function handleImageUpload(event) {
     var imageVal;
     if (ApplicationState.showVideo) {
@@ -113,7 +182,7 @@ function processImage() {
 }
 
 function resetCanvas() {
-    clearClassDetections();
+    resetClassesDetected();
     ApplicationState.canvasContext.clearRect(0, 0, ApplicationState.canvasContext.canvas.width, ApplicationState.canvasContext.canvas.height);
     buttonElements.clearButton.disabled = true;
     buttonElements.reprocessButton.disabled = true;
@@ -189,6 +258,7 @@ async function displayClassesDetected() {
     ApplicationState.classesSet.forEach(className => {
         if (ApplicationState.noDisplaySet.has(className)) return; // skip if in no display set
         const button = document.createElement('button');
+        button.classList.add('classButton');
         button.innerText = className;
         button.onclick = () => {
             ApplicationState.noDisplaySet.add(className);
@@ -232,13 +302,12 @@ function displayExcludedClasses() {
     displayElements.excludedClasses.innerHTML = ''; // clear previous
     ApplicationState.noDisplaySet.forEach(className => {
         const button = document.createElement('button');
+        button.classList.add('classButton');
         button.innerText = className;
         button.onclick = () => {
             ApplicationState.noDisplaySet.delete(className);
             ApplicationState.classesSet.add(className);
-            console.log(`Including class: ${className}`);
             displayExcludedClasses();
-            resetClassesDetected();
             ApplicationState.classCounts.clear();
             ApplicationState.classPredictions.clear();
             if (ApplicationState.selectedImageFile) processImage();
@@ -250,7 +319,13 @@ function displayExcludedClasses() {
 function resetClassesDetected() {
     ApplicationState.classesSet.clear();
     ApplicationState.noDisplaySet.clear();
+    ApplicationState.prevClassesSet.clear();
+    ApplicationState.classCounts.clear();
+    ApplicationState.classPredictions.clear();
+    ApplicationState.topPredictionsHeap = null;
     displayElements.classesDetected.innerHTML = ''; // clear display
+    displayElements.detectionRanksBody.innerHTML = '';
+
 }
 
 function addClassDetection(prediction) {
@@ -275,10 +350,40 @@ function addClassDetection(prediction) {
     ApplicationState.classPredictions.get(className).push(prediction);
 }
 
-function clearClassDetections() {
-    ApplicationState.classCounts.clear();
-    ApplicationState.classPredictions.clear();
+const toOrdinal = (n) => {
+    var stringNumber = n.toString();
+    var lastDigit = stringNumber.charAt(stringNumber.length - 1);
+    if (lastDigit == `1`) {
+        return stringNumber + 'st';
+    } else if (lastDigit == `2`) {
+        return stringNumber + 'nd';
+    } else if (lastDigit == `3`) {
+        return stringNumber + 'rd';
+    } else {
+        return stringNumber + 'th';
+    }
 }
+
+
+function displayDetectionRanks() {
+    displayElements.detectionRanksBody.innerHTML = ''; // clear previous
+    if (!ApplicationState.topPredictionsHeap) return;
+    const sortedPredictions = ApplicationState.topPredictionsHeap.sort();
+    sortedPredictions.forEach(prediction => {
+        const row = document.createElement('tr');
+        const rankCell = document.createElement('td');
+        rankCell.innerText = toOrdinal(displayElements.detectionRanksBody.children.length + 1);
+        row.appendChild(rankCell);
+        const classCell = document.createElement('td');
+        classCell.innerText = prediction.class;
+        row.appendChild(classCell);
+        const scoreCell = document.createElement('td');
+        scoreCell.innerText = (prediction.score * 100).toFixed(1) + '%';
+        row.appendChild(scoreCell);
+        displayElements.detectionRanksBody.appendChild(row);
+    });
+}
+
 
 function displayBoundingBoxes(predictions, ctx) {
     ApplicationState.topPredictionsHeap = null;
@@ -300,6 +405,7 @@ function displayBoundingBoxes(predictions, ctx) {
         );
     };
     console.log("predictions ranked by confidence:", ApplicationState.topPredictionsHeap ? ApplicationState.topPredictionsHeap.sort() : []);
+    displayDetectionRanks();
     displayClassesDetected();
     displayClassCounts();
 }
@@ -312,8 +418,6 @@ function saveCanvasImage() {
     link.click();
 }
 
-document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
-document.getElementById('webcamButton').addEventListener('click', handleWebcam);
 
 function displayBackendOptions() {
     const backends = tf.engine().backendNames();
@@ -342,17 +446,25 @@ function HandleBackendChange(event) {
         console.log(`Backend switched to: ${selectedBackend}`);
     });
 }
+
+
+function displayModelInfo(name) {
+    if (!ApplicationState.model) return;
+    displayElements.modelName.innerText = `${modelMetadata[name]?.name || 'Unknown'}`;
+    displayElements.modelVersion.innerText = `${modelMetadata[name]?.version || 'Unknown'}`;
+    displayElements.modelSize.innerText = `${modelMetadata[name]?.sizeMB ? modelMetadata[name].sizeMB.toFixed(2) + ' MB' : 'Unknown'}`;
+}
 var main = async () => {
     displayBackendOptions();
     console.log('Loading COCO-SSD model...');
-    ApplicationState.model = await cocoSsd.load();
-    console.log('COCO-SSD model loaded. Warming up...');
-    ApplicationState.model.detect(document.createElement('canvas'));
-    console.log('Model is ready.');
+    changeModel('lite_mobilenet_v2');
     ApplicationState.videoStream = document.createElement('video');
-    console.log(ApplicationState.model)
 
 }
+
+
+document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
+document.getElementById('webcamButton').addEventListener('click', handleWebcam);
 
 buttonElements.saveButton.addEventListener('click', saveCanvasImage);
 buttonElements.stopWebcamButton.addEventListener('click', stopWebcam);
