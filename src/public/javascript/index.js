@@ -241,7 +241,7 @@ function handleWebcam() {
                 displayVideo();
                 // process based on frame rate
             };
-            buttonElements.stopWebcamButton.disabled = true;
+
         })
         .catch(err => {
             if (err.name === 'NotAllowedError') {
@@ -251,7 +251,7 @@ function handleWebcam() {
             displayInfoMessage(`Error accessing webcam: ${err}`);
 
         });
-}
+};
 async function stopWebcam() {
     ApplicationState.showVideo = false;
     buttonElements.stopWebcamButton.disabled = true;
