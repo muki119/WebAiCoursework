@@ -8,6 +8,9 @@ Implementing Machine Learning on the web using Tensorflow.js
 - Display model metadata (name, version, size)
 
 # Intallation
+Requriements:
+- Node.js (v22.18.x or later)
+
 1. Clone the repository:
    ```bash
    git clone https://github.com/muki119/WebAiCoursework.git
@@ -20,8 +23,9 @@ Implementing Machine Learning on the web using Tensorflow.js
     ```bash
     npm install
      ```
-4. Start the development server:
+# Running the Application
+1. Start the development server:
     ```bash
     npm start
      ```
-5. Open your web browser and go to `http://localhost:8080` to access the application.
+2. Open your web browser and go to `http://localhost:8080` to access the application.
