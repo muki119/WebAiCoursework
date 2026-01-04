@@ -8,16 +8,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 app.use(express.static(path.join(__dirname, "./src/public")));
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, "./src/views/index.html"));
-});
+
 
 const server = app.listen(port, function () {
     console.log(`Server is running on port ${port}`);
 });
 
 
-process.on('SIGINT', function () {
+process.on('SIGINT', function () { // graceful shutdown
     console.log("Shutting down server...");
     server.close(function () {
         console.log("Server shut down.");
