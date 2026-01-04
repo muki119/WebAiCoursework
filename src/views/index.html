@@ -43,18 +43,20 @@
 				step="0.01"
 				value="0.5"
 			/>
-			<label for="frameRateSlider"
-				>Frame Rate: <span id="frameRateValue">20</span> FPS</label
-			>
-			<input
-				type="range"
-				id="frameRateSlider"
-				name="frameRateSlider"
-				min="0"
-				max="60"
-				step="5"
-				value="20"
-			/>
+			<div class="frameRateSliderContainer">
+				<label for="frameRateSlider"
+					>Frame Rate: <span id="frameRateValue">20</span> FPS</label
+				>
+				<input
+					type="range"
+					id="frameRateSlider"
+					name="frameRateSlider"
+					min="0"
+					max="60"
+					step="5"
+					value="20"
+				/>
+			</div>
 		</div>
 		<div class="mainContainer">
 			<div>
@@ -101,16 +103,17 @@
 						<tbody id="detectionRanksBody"></tbody>
 					</table>
 				</div>
-                <div class = "modelMetadata">
-                    <h3>Model Metadata</h3>
-                    <label>Model Name</label>
-                    <p id="modelName"></p>
-                    <hr>
-                    <label>Version</label>
-                    <p id="modelVersion"></p>
-                    <hr>
-                    <label>Size</label>
-                    <p id="modelSize"></p>
+				<div class="modelMetadata">
+					<h3>Model Metadata</h3>
+					<label>Model Name</label>
+					<p id="modelName"></p>
+					<hr />
+					<label>Version</label>
+					<p id="modelVersion"></p>
+					<hr />
+					<label>Size</label>
+					<p id="modelSize"></p>
+				</div>
 			</div>
 		</div>
 	</body>

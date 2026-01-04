@@ -14,7 +14,6 @@ var ApplicationState = {
     prevClassesSet: new Set(),
     noDisplaySet: new Set(),
     classCounts: new Map(), // Map to hold counts of detected classes in a frame
-    classPredictions: new Map(), // Map to hold arrays of predictions per class
     classColorsMap: new Map(), // Map to hold colors assigned to each class
     topPredictionsHeap: null, // MaxHeap to hold top predictions based on confidence
 };
@@ -22,12 +21,12 @@ var ApplicationState = {
 const modelMetadata = {
     'lite_mobilenet_v2': {
         name: 'Lite MobileNet V2',
-        version: '1.0',
+        version: '2.0',
         sizeMB: 18.0,
     },
     'mobilenet_v2': {
         name: 'MobileNet V2',
-        version: '1.0.0',
+        version: '2.0.0',
         sizeMB: 67.3,
     },
     'mobilenet_v1': {
@@ -72,12 +71,13 @@ const displayElements = {
 
 
 function generateColorForClass(className) {
-    // from string name , generate a consistent color through hashing
-    //need to fit it into either rgb or hex format
-    let hash = 0;
+    //using a hash function to generate a consistent color for each class
+    //allows for expanding to many classes without running out of colors
+    // using the djb2 hash function - was the easiest to implement and gives good distribution
+    //using hue because it gives a wide range of colors and faster to compute instead of full rgb or hex
+    let hash = 5381;
     for (let i = 0; i < className.length; i++) {
-        hash = className.charCodeAt(i) + ((hash << 5) - hash);
-        console.log('hash step', hash);
+        hash = ((hash << 5) + hash) + className.charCodeAt(i);
     }
     const hue = hash % 360; // hue between 0-359
     return `hsl(${hue}, 70%, 50%)`;
@@ -102,6 +102,7 @@ function disableAllInteractiveElements() {
         if (element.id === 'stopWebcamButton' && ApplicationState.showVideo) return; // keep stop button enabled if webcam is active
         if (element.id === 'clearButton' && !ApplicationState.selectedImageFile) return; // keep clear button disabled if no image
         if (element.id === 'reprocessButton' && !ApplicationState.selectedImageFile) return; // keep reprocess button disabled if no image
+        console.log('Disabling element:', element);
         element.disabled = true;
     });
 }
@@ -111,6 +112,7 @@ function enableAllInteractiveElements() {
         if (element.id === 'stopWebcamButton' && !ApplicationState.showVideo) return; // keep stop button disabled if webcam is not active
         if (element.id === 'clearButton' && !ApplicationState.selectedImageFile) return; // keep clear button disabled if no image
         if (element.id === 'reprocessButton' && !ApplicationState.selectedImageFile) return; // keep reprocess button disabled if no image
+        console.log('Enabling element:', element);
         element.disabled = false;
     });
 }
@@ -122,8 +124,8 @@ function handleModelChange(event) {
 }
 function changeModel(selectedModel) {
     displayInfoMessage(`Loading model: ${selectedModel}...`);
+    disableAllInteractiveElements();
     cocoSsd.load({ base: selectedModel }).then(loadedModel => {
-        disableAllInteractiveElements();
         ApplicationState.model?.dispose(); // Dispose of the old model
         ApplicationState.model = loadedModel;
         ApplicationState.model.detect(document.createElement('canvas')); // Warm up new model
@@ -140,7 +142,9 @@ function changeModel(selectedModel) {
 
 }
 
-function displayInfoMessage(message) {
+function displayInfoMessage(message, ...args) {
+    const color = args[0] || 'black';
+    displayElements.infoDisplay.style.color = color;
     if (displayElements.infoDisplay.style.display === 'none') {
         displayElements.infoDisplay.style.display = 'block';
     }
@@ -237,10 +241,15 @@ function handleWebcam() {
                 displayVideo();
                 // process based on frame rate
             };
+            buttonElements.stopWebcamButton.disabled = true;
         })
         .catch(err => {
-            console.error("Error accessing webcam: ", err);// display error 
-            buttonElements.stopWebcamButton.disabled = true;
+            if (err.name === 'NotAllowedError') {
+                displayInfoMessage('Webcam access denied. Please allow webcam access and try again.', 'red');
+                return;
+            }
+            displayInfoMessage(`Error accessing webcam: ${err}`);
+
         });
 }
 async function stopWebcam() {
@@ -264,7 +273,6 @@ async function displayClassesDetected() {
             ApplicationState.noDisplaySet.add(className);
             ApplicationState.classesSet.delete(className);
             ApplicationState.classCounts.clear();
-            ApplicationState.classPredictions.clear();
             console.log(`Filtering out class: ${className}`);
             displayClassesDetected();
             if (ApplicationState.selectedImageFile) processImage();
@@ -309,7 +317,6 @@ function displayExcludedClasses() {
             ApplicationState.classesSet.add(className);
             displayExcludedClasses();
             ApplicationState.classCounts.clear();
-            ApplicationState.classPredictions.clear();
             if (ApplicationState.selectedImageFile) processImage();
         };
         displayElements.excludedClasses.appendChild(button);
@@ -321,7 +328,6 @@ function resetClassesDetected() {
     ApplicationState.noDisplaySet.clear();
     ApplicationState.prevClassesSet.clear();
     ApplicationState.classCounts.clear();
-    ApplicationState.classPredictions.clear();
     ApplicationState.topPredictionsHeap = null;
     displayElements.classesDetected.innerHTML = ''; // clear display
     displayElements.detectionRanksBody.innerHTML = '';
@@ -343,11 +349,6 @@ function addClassDetection(prediction) {
     // Update count
     const currentCount = ApplicationState.classCounts.get(className) || 0;
     ApplicationState.classCounts.set(className, currentCount + 1);
-    // Update predictions array
-    if (!ApplicationState.classPredictions.has(className)) {
-        ApplicationState.classPredictions.set(className, []);
-    }
-    ApplicationState.classPredictions.get(className).push(prediction);
 }
 
 const toOrdinal = (n) => {
@@ -452,7 +453,7 @@ function displayModelInfo(name) {
     if (!ApplicationState.model) return;
     displayElements.modelName.innerText = `${modelMetadata[name]?.name || 'Unknown'}`;
     displayElements.modelVersion.innerText = `${modelMetadata[name]?.version || 'Unknown'}`;
-    displayElements.modelSize.innerText = `${modelMetadata[name]?.sizeMB ? modelMetadata[name].sizeMB.toFixed(2) + ' MB' : 'Unknown'}`;
+    displayElements.modelSize.innerText = ` ≈ ${modelMetadata[name]?.sizeMB ? modelMetadata[name].sizeMB.toFixed(2) + ' MB' : 'Unknown'}`;
 }
 var main = async () => {
     displayBackendOptions();

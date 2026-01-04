@@ -5,6 +5,10 @@ html,body {
     background-color: #f4f4f4;
 }
 
+hr{
+    width: 100%;
+}
+
 .optionMenu {
     display: flex;
     flex-direction: row;
@@ -37,9 +41,16 @@ html,body {
     flex-wrap: wrap;
 }
 
+
+button,select,input{
+    margin: 5px;
+    padding: 5px;
+    font-size: 1rem;
+}
 #canvas {
-    height: 80vh;
+    height: fit-content;
     max-width: 100vw;
+    max-height: 80vh;
     border: 2px solid #333;
     display: block;
     margin: 20px auto;
