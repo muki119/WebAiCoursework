@@ -1,3 +1,25 @@
+/**
+ * A MaxHeap implementation.
+ * 
+ * @class MaxHeap
+ * @example
+ * // Create an empty heap
+ * const heap = new MaxHeap();
+ * 
+ * @example
+ * // Create a heap from an existing array
+ * const heap = new MaxHeap([5, 3, 8, 1, 2]);
+ * 
+ * @example
+ * // Create a heap with a custom comparison function
+ * const heap = new MaxHeap([{val: 5}, {val: 3}], (a, b) => a.val > b.val);
+ * 
+ * @property {Array} heap - The internal array storing heap elements
+ * @property {number} size - The current number of elements in the heap
+ * @property {number} capacity - The current capacity of the heap array
+ * @property {number} endPtr - Pointer to the last element in the heap
+ * @property {Function} comparisonFunc - Function used to compare elements (returns true if first arg should be higher in heap)
+ */
 export default class MaxHeap {
 
     constructor(...elements) {
@@ -69,6 +91,12 @@ export default class MaxHeap {
     #expand() {
         this.capacity = Math.floor(this.capacity * 1.5);
     }
+
+    /**
+     * Inserts a new value into the heap and maintains the heap property.
+     * O(log n) time complexity.
+     * @param {any} value 
+     */
     insert(value) {
         if (this.size >= this.capacity) {
             this.#expand();
@@ -79,6 +107,11 @@ export default class MaxHeap {
         this.#siftup(this.endPtr);
     }
 
+    /**
+     *  Removes and returns the maximum value (root) from the heap and maintains the heap property.
+     * O(log n) time complexity.
+     * @returns {any} value
+     */
     deleteMax() {
         if (this.size === 0) return null;
         const maxValue = this.heap[0];
@@ -88,12 +121,23 @@ export default class MaxHeap {
         this.#siftdown(0);
         return maxValue;
     }
+
+    /**
+     * Transforms the current array into a valid max heap in-place.
+     * O(n log n) time complexity.
+     */
     heapify() {
         const startIdx = Math.floor((this.size - 2) / 2); // last non-leaf node
         for (let i = startIdx; i >= 0; i--) {
             this.#siftdown(i);
         }
     }
+
+    /**
+     * sorts the elements of the heap in descending order and returns a new array.
+     * O(n log n) time complexity.
+     * @returns {any[]}
+     */
 
     sort() {
         const sortedArray = [];
